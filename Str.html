@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Strassen's Matrix Multiplier</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .matrix-cell { transition: all 0.2s ease; }
+        .matrix-cell:focus { transform: scale(1.05); }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-blue-100 to-purple-100 min-h-screen p-8">
+    <div class="max-w-7xl mx-auto">
+        <h1 class="text-4xl font-bold text-center mb-8 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+            Strassen's Matrix Multiplication
+        </h1>
+
+        <!-- Size Selector -->
+        <div class="flex justify-center gap-4 mb-8">
+            <button onclick="setSize(2)" class="size-btn px-6 py-2 rounded-full bg-white shadow-md hover:shadow-lg transition-all">2x2</button>
+            <button onclick="setSize(4)" class="size-btn px-6 py-2 rounded-full bg-white shadow-md hover:shadow-lg transition-all">4x4</button>
+            <button onclick="setSize(8)" class="size-btn px-6 py-2 rounded-full bg-white shadow-md hover:shadow-lg transition-all">8x8</button>
+        </div>
+
+        <!-- Matrix Inputs -->
+        <div class="grid md:grid-cols-2 gap-8 mb-8" id="matrixContainer"></div>
+
+        <!-- Calculate Button -->
+        <div class="text-center mb-12">
+            <button onclick="calculate()" class="px-8 py-3 bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded-xl shadow-lg hover:shadow-xl transition-all hover:scale-105">
+                🚀 Calculate Multiplication
+            </button>
+        </div>
+
+        <!-- Results Display -->
+        <div id="results" class="space-y-8"></div>
+    </div>
+
+    <script>
+        let currentSize = 2;
+        let matrixA = [];
+        let matrixB = [];
+        let steps = [];
+
+        // Initialize matrices
+        function initMatrix(size) {
+            matrixA = Array.from({ length: size }, () => Array(size).fill(0));
+            matrixB = Array.from({ length: size }, () => Array(size).fill(0));
+            renderMatrices();
+        }
+
+        // Render input matrices
+        function renderMatrices() {
+            const container = document.getElementById('matrixContainer');
+            container.innerHTML = '';
+            
+            const createMatrixInputs = (matrix, label) => {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'bg-white p-6 rounded-2xl shadow-lg';
+                wrapper.innerHTML = `<h2 class="text-2xl font-bold mb-4 text-center text-gray-700">${label}</h2>`;
+                
+                const grid = document.createElement('div');
+                grid.className = 'grid gap-3 justify-center';
+                grid.style.gridTemplateColumns = `repeat(${currentSize}, minmax(0, 1fr))`;
+                
+                matrix.forEach((row, i) => row.forEach((val, j) => {
+                    const input = document.createElement('input');
+                    input.className = 'matrix-cell w-16 h-16 p-2 border-2 border-gray-200 rounded-lg text-center focus:border-blue-400 focus:ring-2 focus:ring-blue-100';
+                    input.type = 'number';
+                    input.value = val;
+                    input.onchange = (e) => matrix[i][j] = Number(e.target.value) || 0;
+                    grid.appendChild(input);
+                }));
+                
+                wrapper.appendChild(grid);
+                return wrapper;
+            };
+
+            container.appendChild(createMatrixInputs(matrixA, 'Matrix A'));
+            container.appendChild(createMatrixInputs(matrixB, 'Matrix B'));
+        }
+
+        // Matrix operations
+        function add(a, b) {
+            return a.map((row, i) => row.map((val, j) => val + b[i][j]));
+        }
+
+        function sub(a, b) {
+            return a.map((row, i) => row.map((val, j) => val - b[i][j]));
+        }
+
+        function split(matrix) {
+            const mid = matrix.length / 2;
+            return [
+                matrix.slice(0, mid).map(row => row.slice(0, mid)),
+                matrix.slice(0, mid).map(row => row.slice(mid)),
+                matrix.slice(mid).map(row => row.slice(0, mid)),
+                matrix.slice(mid).map(row => row.slice(mid))
+            ];
+        }
+
+        function combine(c11, c12, c21, c22) {
+            return [...c11.map((row, i) => [...row, ...c12[i]]), 
+                    ...c22.map((row, i) => [...c21[i], ...row])];
+        }
+
+        // Strassen's algorithm with step tracking
+        function strassen(A, B, depth = 0) {
+            const n = A.length;
+            const step = { depth, operation: null, matrices: {}, result: null };
+
+            if (n === 1) {
+                const result = [[A[0][0] * B[0][0]]];
+                step.operation = 'Base multiplication';
+                step.matrices = { A: [...A], B: [...B] };
+                step.result = result;
+                steps.push(step);
+                return result;
+            }
+
+            const [A11, A12, A21, A22] = split(A);
+            const [B11, B12, B21, B22] = split(B);
+
+            // Intermediate matrices
+            const M1 = strassen(add(A11, A22), add(B11, B22), depth + 1);
+            const M2 = strassen(add(A21, A22), B11, depth + 1);
+            const M3 = strassen(A11, sub(B12, B22), depth + 1);
+            const M4 = strassen(A22, sub(B21, B11), depth + 1);
+            const M5 = strassen(add(A11, A12), B22, depth + 1);
+            const M6 = strassen(sub(A21, A11), add(B11, B12), depth + 1);
+            const M7 = strassen(sub(A12, A22), add(B21, B22), depth + 1);
+
+            // Result quadrants
+            const C11 = add(sub(add(M1, M4), M5), M7);
+            const C12 = add(M3, M5);
+            const C21 = add(M2, M4);
+            const C22 = add(sub(M1, M2), add(M3, M6));
+
+            step.operation = `Combine ${n}x${n} results`;
+            step.matrices = { M1, M2, M3, M4, M5, M6, M7 };
+            step.result = combine(C11, C12, C21, C22);
+            steps.push(step);
+
+            return step.result;
+        }
+
+        // Display results
+        function showMatrix(matrix, title) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'bg-white p-4 rounded-xl shadow-md animate-slideIn';
+            wrapper.innerHTML = `
+                <h3 class="text-lg font-semibold mb-2 text-blue-600">${title}</h3>
+                <div class="inline-block border-2 border-gray-100 rounded-lg overflow-hidden">
+                    ${matrix.map(row => `
+                        <div class="flex">
+                            ${row.map(cell => `
+                                <div class="w-14 h-14 flex items-center justify-center bg-blue-50 border-2 border-blue-100">
+                                    ${cell}
+                                </div>
+                            `).join('')}
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+            return wrapper;
+        }
+
+        function calculate() {
+            steps = [];
+            const result = strassen(matrixA, matrixB);
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '';
+
+            // Show final result
+            resultsDiv.appendChild(showMatrix(result, 'Final Result'));
+
+            // Show calculation steps
+            const stepsHeader = document.createElement('h2');
+            stepsHeader.className = 'text-3xl font-bold mt-12 mb-8 text-center text-gray-700';
+            stepsHeader.textContent = 'Calculation Steps';
+            resultsDiv.appendChild(stepsHeader);
+
+            steps.forEach((step, index) => {
+                const stepDiv = document.createElement('div');
+                stepDiv.className = 'bg-white p-6 rounded-xl shadow-lg mb-6 animate-slideIn';
+                
+                let content = '';
+                if (step.operation === 'Base multiplication') {
+                    content = `
+                        <div class="mb-4">
+                            <h3 class="text-blue-600 font-bold mb-2">Step ${index + 1}: ${step.operation}</h3>
+                            <div class="flex gap-4 justify-center">
+                                ${showMatrix(step.matrices.A, 'A').outerHTML}
+                                <span class="self-center text-2xl">×</span>
+                                ${showMatrix(step.matrices.B, 'B').outerHTML}
+                                <span class="self-center text-2xl">=</span>
+                                ${showMatrix(step.result, 'Result').outerHTML}
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    content = `
+                        <h3 class="text-xl font-semibold mb-4 text-gray-700">
+                            Step ${index + 1}: ${step.operation}
+                        </h3>
+                        <div class="grid grid-cols-2 gap-4 mb-4">
+                            <div class="p-4 bg-blue-50 rounded-lg">
+                                <h4 class="text-blue-600 font-medium mb-2">Intermediate Matrices</h4>
+                                ${Object.entries(step.matrices).map(([key, matrix]) => 
+                                    showMatrix(matrix, key).outerHTML
+                                ).join('')}
+                            </div>
+                            <div class="p-4 bg-purple-50 rounded-lg">
+                                <h4 class="text-purple-600 font-medium mb-2">Result Components</h4>
+                                ${showMatrix(step.result, 'Combined Result').outerHTML}
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                stepDiv.innerHTML = content;
+                resultsDiv.appendChild(stepDiv);
+            });
+        }
+
+        function setSize(size) {
+            currentSize = size;
+            initMatrix(size);
+            document.getElementById('results').innerHTML = '';
+        }
+
+        // Initialize
+        setSize(2);
+    </script>
+</body>
+</html>
